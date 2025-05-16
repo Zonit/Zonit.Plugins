@@ -1,13 +1,13 @@
-﻿namespace Zonit.Plugins.Articles.Abstractions.Events;
+﻿namespace Zonit.Plugins.Articles.Abstractions;
 
 /// <summary>
-/// Represents an event triggered when an article is created.
+/// Represents an event that occurs when an article is created.
 /// </summary>
-/// <remarks>This event contains information about the article creation, including its unique identifier and
-/// optional associations with an organization, project, or user.</remarks>
-public class ArticleCreateEvent
+/// <remarks>This event contains information about the article's unique identifier and optional related entities,
+/// such as the organization, project, or user associated with the article.</remarks>
+public class ArticleCreatedEvent
 {
-    public Guid Id { get; set; }
+    public required Guid Id { get; set; }
     public Guid? OrganizationId { get; set; }
     public Guid? ProjectId { get; set; }
     public Guid? UserId { get; set; }
