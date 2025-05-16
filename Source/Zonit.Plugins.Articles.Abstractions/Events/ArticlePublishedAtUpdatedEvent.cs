@@ -5,7 +5,7 @@
 /// </summary>
 /// <remarks>This class is typically used to convey information about an article whose publication timestamp has
 /// been modified.</remarks>
-public class ArticlePublishedAtUpdated
+public class ArticlePublishedAtUpdatedEvent
 {
     public required Guid Id { get; set; }
     public required DateTime PublishedAt { get; set; }

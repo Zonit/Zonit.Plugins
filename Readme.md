@@ -37,3 +37,6 @@ The following events are defined in the library:
 
 - **ArticlePermissionUpdatedEvent**  
   Triggered when the permissions for an article are updated. Contains the article ID and the new permission value.
+
+- **ArticleDescriptionUpdatedEvent**  
+  Wywo³ywany, gdy opis artyku³u zostaje zaktualizowany. Zawiera identyfikator artyku³u oraz nowy opis.
