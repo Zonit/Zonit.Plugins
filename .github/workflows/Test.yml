@@ -51,7 +51,7 @@ jobs:
             # Porównaj wersje i uruchom workflow tylko jeśli lokalna > nugetowa
             if dpkg --compare-versions "$LOCAL_VERSION" gt "$NUGET_VERSION"; then
               echo "🔁 Local version is newer – triggering publish for $PACKAGE_NAME"
-              gh workflow run build-and-publish.yml -f source_directory=Source
+              gh workflow run PublishNuGet.yml -f source_directory=Source
             else
               echo "✅ Version is up to date. No publish needed."
             fi
