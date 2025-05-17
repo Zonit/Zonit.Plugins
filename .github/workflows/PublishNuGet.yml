@@ -1,0 +1,19 @@
+name: Build and Publish NuGet
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+    paths:
+      - 'Source/**/*.csproj'
+      - 'Source/**/*.cs'
+      - 'Source/Directory.Packages.props'
+
+jobs:
+  publish:
+    uses: ./.github/workflows/reusable-publish-nuget.yml
+    with:
+      source_directory: 'Source'
+    secrets:
+      NUGET_API_KEY: ${{ secrets.NUGET_API_KEY }}
