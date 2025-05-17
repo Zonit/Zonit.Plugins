@@ -29,7 +29,12 @@ jobs:
           dotnet-version: |
             8.0.x
             9.0.x
-            10.0.100-preview.4.25258.110  # Aktualna wersja preview .NET 10 (maj 2025)
+
+      - name: Setup .NET 10 Preview SDK (optional)
+        continue-on-error: true
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 10.0.100-preview.4.25258.110
 
       - name: Show installed .NET versions
         run: dotnet --list-sdks && dotnet --list-runtimes
