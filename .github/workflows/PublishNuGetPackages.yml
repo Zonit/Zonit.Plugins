@@ -1,4 +1,4 @@
-﻿name: Publish NuGet Packages
+name: Publish NuGet Packages
 
 on:
   workflow_dispatch:
@@ -14,6 +14,10 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
+    env:
+      DOTNET_ROLL_FORWARD: LatestMajor
+      DOTNET_SKIP_FIRST_TIME_EXPERIENCE: true
+      DOTNET_CLI_TELEMETRY_OPTOUT: true
 
     steps:
       - name: Checkout code
@@ -25,7 +29,10 @@ jobs:
           dotnet-version: |
             8.0.x
             9.0.x
-            10.0.x
+            10.0.100-preview.4.25258.110  # Aktualna wersja preview .NET 10 (maj 2025)
+
+      - name: Show installed .NET versions
+        run: dotnet --list-sdks && dotnet --list-runtimes
 
       - name: Restore all projects in Source
         run: |
@@ -50,7 +57,8 @@ jobs:
       - name: Publish all projects in Source (net10.0)
         run: |
           for proj in $(find Source -name '*.csproj'); do
-            dotnet publish "$proj" --configuration Release --framework net10.0 --output ./publish/$(basename "$proj" .csproj)-net10.0 || true
+            # Dodanie parametru --roll-forward=LatestMajor dla .NET 10 Preview
+            dotnet publish "$proj" --configuration Release --framework net10.0 --output ./publish/$(basename "$proj" .csproj)-net10.0 --roll-forward LatestMajor || true
           done
 
       - name: Pack all projects in Source
