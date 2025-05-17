@@ -1,78 +1,131 @@
-name: Publish NuGet Packages
+name: Reusable Publish NuGet Packages
 
 on:
-  workflow_dispatch:
-  push:
-    branches:
-      - main
-    paths:
-      - 'Source/**/*.csproj'
-      - 'Source/**/*.cs'
-      - 'Source/Directory.Packages.props' 
-      - '.github/workflows/**'
+  workflow_call:
+    secrets:
+      NUGET_API_KEY:
+        required: true
+    inputs:
+      source_directory:
+        description: 'Directory containing .NET projects'
+        required: false
+        default: 'Source'
+        type: string
 
 jobs:
   build:
     runs-on: ubuntu-latest
     env:
-      DOTNET_ROLL_FORWARD: LatestMajor
       DOTNET_SKIP_FIRST_TIME_EXPERIENCE: true
       DOTNET_CLI_TELEMETRY_OPTOUT: true
+      SOURCE_DIR: ${{ inputs.source_directory }}
 
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Setup .NET 8 and 9 SDKs
-        uses: actions/setup-dotnet@v4
-        with:
-          dotnet-version: |
-            8.0.x
-            9.0.x
+      - name: Detect .NET frameworks used in projects
+        id: detect-frameworks
+        run: |
+          # Initialize variables to track framework detection
+          echo "NEEDS_NET6=false" >> $GITHUB_ENV
+          echo "NEEDS_NET7=false" >> $GITHUB_ENV
+          echo "NEEDS_NET8=false" >> $GITHUB_ENV
+          echo "NEEDS_NET9=false" >> $GITHUB_ENV
+          echo "NEEDS_NET10=false" >> $GITHUB_ENV
+          
+          # Detect frameworks from all projects
+          for proj in $(find $SOURCE_DIR -name '*.csproj'); do
+            echo "Analyzing project: $proj"
+            
+            if grep -q "net6\.0" "$proj"; then
+              echo "Found .NET 6.0 in $proj"
+              echo "NEEDS_NET6=true" >> $GITHUB_ENV
+            fi
+            
+            if grep -q "net7\.0" "$proj"; then
+              echo "Found .NET 7.0 in $proj"
+              echo "NEEDS_NET7=true" >> $GITHUB_ENV
+            fi
+            
+            if grep -q "net8\.0" "$proj"; then
+              echo "Found .NET 8.0 in $proj"
+              echo "NEEDS_NET8=true" >> $GITHUB_ENV
+            fi
+            
+            if grep -q "net9\.0" "$proj"; then
+              echo "Found .NET 9.0 in $proj"
+              echo "NEEDS_NET9=true" >> $GITHUB_ENV
+            fi
+            
+            if grep -q "net10\.0" "$proj"; then
+              echo "Found .NET 10.0 in $proj"
+              echo "NEEDS_NET10=true" >> $GITHUB_ENV
+            fi
+          done
+          
+          # Create SDK versions string for setup-dotnet
+          DOT_NET_VERSIONS=""
+          if [ "$NEEDS_NET6" = "true" ]; then DOT_NET_VERSIONS+="6.0.x\n"; fi
+          if [ "$NEEDS_NET7" = "true" ]; then DOT_NET_VERSIONS+="7.0.x\n"; fi
+          if [ "$NEEDS_NET8" = "true" ]; then DOT_NET_VERSIONS+="8.0.x\n"; fi
+          if [ "$NEEDS_NET9" = "true" ]; then DOT_NET_VERSIONS+="9.0.x\n"; fi
+          if [ "$NEEDS_NET10" = "true" ]; then DOT_NET_VERSIONS+="10.0.x\n"; fi
+          
+          # Remove trailing newline if exists
+          DOT_NET_VERSIONS=$(echo -e "$DOT_NET_VERSIONS" | sed -e 's/\n$//')
+          echo "DOT_NET_VERSIONS<<EOF" >> $GITHUB_ENV
+          echo -e "$DOT_NET_VERSIONS" >> $GITHUB_ENV
+          echo "EOF" >> $GITHUB_ENV
+          
+          echo "Frameworks detected:"
+          echo "NET6: $NEEDS_NET6"
+          echo "NET7: $NEEDS_NET7"
+          echo "NET8: $NEEDS_NET8"
+          echo "NET9: $NEEDS_NET9"
+          echo "NET10: $NEEDS_NET10"
 
-      - name: Setup .NET 10 Preview SDK (optional)
-        continue-on-error: true
+      - name: Setup required .NET SDKs
         uses: actions/setup-dotnet@v4
         with:
-          dotnet-version: 10.0.100-preview.4.25258.110
+          dotnet-version: ${{ env.DOT_NET_VERSIONS }}
 
       - name: Show installed .NET versions
         run: dotnet --list-sdks && dotnet --list-runtimes
 
-      - name: Restore all projects in Source
-        run: |
-          find Source -name '*.csproj' -print0 | xargs -0 -n1 dotnet restore
+      - name: Restore all projects
+        run: dotnet restore
 
-      - name: Build all projects in Source
-        run: |
-          find Source -name '*.csproj' -print0 | xargs -0 -n1 dotnet build --configuration Release --no-restore
+      - name: Build all projects
+        run: dotnet build --configuration Release --no-restore
 
-      - name: Publish all projects in Source (net8.0)
+      - name: Publish projects for each detected framework
         run: |
-          for proj in $(find Source -name '*.csproj'); do
-            dotnet publish "$proj" --configuration Release --framework net8.0 --output ./publish/$(basename "$proj" .csproj)-net8.0 || true
-          done
-
-      - name: Publish all projects in Source (net9.0)
-        run: |
-          for proj in $(find Source -name '*.csproj'); do
-            dotnet publish "$proj" --configuration Release --framework net9.0 --output ./publish/$(basename "$proj" .csproj)-net9.0 || true
-          done
+          frameworks=()
+          if [ "$NEEDS_NET6" = "true" ]; then frameworks+=("net6.0"); fi
+          if [ "$NEEDS_NET7" = "true" ]; then frameworks+=("net7.0"); fi
+          if [ "$NEEDS_NET8" = "true" ]; then frameworks+=("net8.0"); fi
+          if [ "$NEEDS_NET9" = "true" ]; then frameworks+=("net9.0"); fi
+          if [ "$NEEDS_NET10" = "true" ]; then frameworks+=("net10.0"); fi
           
-      - name: Publish all projects in Source (net10.0)
-        run: |
-          for proj in $(find Source -name '*.csproj'); do
-            # Dodanie parametru --roll-forward=LatestMajor dla .NET 10 Preview
-            dotnet publish "$proj" --configuration Release --framework net10.0 --output ./publish/$(basename "$proj" .csproj)-net10.0 --roll-forward LatestMajor || true
+          for proj in $(find $SOURCE_DIR -name '*.csproj'); do
+            project_name=$(basename "$proj" .csproj)
+            echo "Processing project: $project_name"
+            
+            for framework in "${frameworks[@]}"; do
+              # Check if this project targets this framework
+              if grep -q "$framework" "$proj"; then
+                echo "Publishing $project_name for $framework"
+                dotnet publish "$proj" --configuration Release --framework $framework --output ./publish/$project_name-$framework
+              else
+                echo "Skipping $framework for $project_name (not targeted)"
+              fi
+            done
           done
 
-      - name: Pack all projects in Source
+      - name: Pack all projects
         run: |
-          for proj in $(find Source -name '*.csproj'); do
-            dotnet pack "$proj" --configuration Release --no-build --output ./nupkgs || true
-          done
+          find $SOURCE_DIR -name '*.csproj' -exec dotnet pack {} --configuration Release --no-build --output ./nupkgs \;
 
       - name: Publish NuGet packages
         run: dotnet nuget push ./nupkgs/*.nupkg --api-key ${{ secrets.NUGET_API_KEY }} --source https://api.nuget.org/v3/index.json
-        env:
-          NUGET_API_KEY: ${{ secrets.NUGET_API_KEY }}
