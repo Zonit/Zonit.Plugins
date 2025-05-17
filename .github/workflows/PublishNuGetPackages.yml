@@ -25,6 +25,7 @@ jobs:
           dotnet-version: |
             8.0.x
             9.0.x
+            10.0.x
 
       - name: Restore all projects in Source
         run: |
@@ -44,6 +45,12 @@ jobs:
         run: |
           for proj in $(find Source -name '*.csproj'); do
             dotnet publish "$proj" --configuration Release --framework net9.0 --output ./publish/$(basename "$proj" .csproj)-net9.0 || true
+          done
+          
+      - name: Publish all projects in Source (net10.0)
+        run: |
+          for proj in $(find Source -name '*.csproj'); do
+            dotnet publish "$proj" --configuration Release --framework net10.0 --output ./publish/$(basename "$proj" .csproj)-net10.0 || true
           done
 
       - name: Pack all projects in Source
