@@ -1,0 +1,62 @@
+﻿name: Check NuGet Versions and Trigger Publish
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - 'Source/Directory.Packages.props'
+
+jobs:
+  check-and-publish:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup jq
+        run: sudo apt-get install jq
+
+      - name: Find all .csproj files
+        id: find_projects
+        run: |
+          echo "projects<<EOF" >> $GITHUB_OUTPUT
+          find Source -name "*.csproj" >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
+
+      - name: Loop through projects and compare versions
+        run: |
+          IFS=$'\n'
+          for proj in ${{ steps.find_projects.outputs.projects }}; do
+            echo "::group::Checking $proj"
+
+            # Wyciągnij nazwę paczki
+            PACKAGE_NAME=$(grep -Eo '<PackageId>.*</PackageId>' "$proj" | sed -E 's/<\/?PackageId>//g')
+            if [ -z "$PACKAGE_NAME" ]; then
+              PACKAGE_NAME=$(basename "$proj" .csproj)
+            fi
+            echo "Package: $PACKAGE_NAME"
+
+            # Wyciągnij wersję z projektu
+            LOCAL_VERSION=$(grep -Eo '<Version>.*</Version>' "$proj" | sed -E 's/<\/?Version>//g')
+            if [ -z "$LOCAL_VERSION" ]; then
+              LOCAL_VERSION=$(grep -Eo '<AssemblyVersion>.*</AssemblyVersion>' Source/Directory.Packages.props | sed -E 's/<\/?AssemblyVersion>//g')
+            fi
+            echo "Local version: $LOCAL_VERSION"
+
+            # Sprawdź wersję z NuGet
+            RESPONSE=$(curl -s "https://api.nuget.org/v3-flatcontainer/${PACKAGE_NAME,,}/index.json" || echo "{}")
+            NUGET_VERSION=$(echo "$RESPONSE" | jq -r '.versions[-1]')
+            echo "NuGet version: $NUGET_VERSION"
+
+            # Porównaj wersje i uruchom workflow tylko jeśli lokalna > nugetowa
+            if dpkg --compare-versions "$LOCAL_VERSION" gt "$NUGET_VERSION"; then
+              echo "🔁 Local version is newer – triggering publish for $PACKAGE_NAME"
+              gh workflow run build-and-publish.yml -f source_directory=Source
+            else
+              echo "✅ Version is up to date. No publish needed."
+            fi
+
+            echo "::endgroup::"
+          done
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
