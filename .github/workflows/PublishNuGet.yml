@@ -12,7 +12,7 @@ on:
 
 jobs:
   publish:
-    uses: Zonit/repo/.github/workflows/reusable-publish-nuget.yml@main
+    uses: Zonit/.github/.github/workflows/reusable-publish-nuget.yml@main
     with:
       source_directory: 'Source'
     secrets:
