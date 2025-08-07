@@ -19,9 +19,11 @@ Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = ".github", ".github", "{8757
 EndProject
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "workflows", "workflows", "{49C3F321-2AFF-4DD4-9B7B-099464ACDEB3}"
 	ProjectSection(SolutionItems) = preProject
-		.github\workflows\PublishNuGet.yml = .github\workflows\PublishNuGet.yml
 		.github\workflows\CheckNugetAndPublish.yml = .github\workflows\CheckNugetAndPublish.yml
+		.github\workflows\PublishNuGet.yml = .github\workflows\PublishNuGet.yml
 	EndProjectSection
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Zonit.Plugins.Wallets.Abstractions", "Source\Zonit.Plugins.Wallets.Abstractions\Zonit.Plugins.Wallets.Abstractions.csproj", "{0607623E-8170-4E13-9BB2-3D450517F957}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
@@ -33,6 +35,10 @@ Global
 		{9AE9E813-8E9E-4E8C-8E6B-BEF16CC4ACC9}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{9AE9E813-8E9E-4E8C-8E6B-BEF16CC4ACC9}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{9AE9E813-8E9E-4E8C-8E6B-BEF16CC4ACC9}.Release|Any CPU.Build.0 = Release|Any CPU
+		{0607623E-8170-4E13-9BB2-3D450517F957}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{0607623E-8170-4E13-9BB2-3D450517F957}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{0607623E-8170-4E13-9BB2-3D450517F957}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{0607623E-8170-4E13-9BB2-3D450517F957}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
@@ -41,6 +47,7 @@ Global
 		{9AE9E813-8E9E-4E8C-8E6B-BEF16CC4ACC9} = {02EA681E-C7D8-13C7-8484-4AC65E1B71E8}
 		{87576891-F7F4-4F34-BFAC-6AC6A734537D} = {8FB176BD-0036-D269-15EA-F86E90622887}
 		{49C3F321-2AFF-4DD4-9B7B-099464ACDEB3} = {87576891-F7F4-4F34-BFAC-6AC6A734537D}
+		{0607623E-8170-4E13-9BB2-3D450517F957} = {02EA681E-C7D8-13C7-8484-4AC65E1B71E8}
 	EndGlobalSection
 	GlobalSection(ExtensibilityGlobals) = postSolution
 		SolutionGuid = {2E389FE4-AF40-407A-9E68-6DA32C991737}
