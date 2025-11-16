@@ -80,7 +80,7 @@ function Test-RequiresPrerelease {
         } | Where-Object { $_ -eq $true }
         
         # If no stable versions exist for this major version, we need prerelease
-        $needsPrerelease = -not $stableVersionsExist
+        $needsPrerelease = @($stableVersionsExist).Count -eq 0
         
         if ($needsPrerelease) {
             Write-Host "  ℹ️  $TargetFramework appears to be prerelease - will allow preview packages" -ForegroundColor Yellow
@@ -307,7 +307,7 @@ try {
         # Collect versions and attributes from all ItemGroups
         foreach ($pv in $ig.PackageVersion) {
             if ($pv.Include -and $pv.Version) {
-                if ($ig.Condition -and $ig.Condition -match "'\`\$\(TargetFramework\)' == '(net\d+\.\d+)'") {
+                if ($ig.Condition -and $ig.Condition -match "'\`$\(TargetFramework\)' == '(net\d+\.\d+)'") {
                     $framework = $matches[1]
                     $key = "$($pv.Include)|$framework"
                 } else {
@@ -346,7 +346,7 @@ try {
         Write-Host "  Resolving versions for $tf..." -ForegroundColor Cyan
         
         foreach ($packageId in $packageList) {
-            # Always fetch latest version from NuGet
+            # Fetch best compatible version from NuGet based on framework requirements
             $version = Get-BestPackageVersion -PackageId $packageId -TargetFramework $tf -AllowPrerelease $allowPrereleaseForFramework
             if ($version) {
                 $packageVersionsByFramework[$tf][$packageId] = $version
@@ -372,7 +372,7 @@ try {
         if ($uniqueVersions.Count -eq 1 -and $uniqueVersions[0]) {
             # All frameworks use the same version
             $commonPackages[$packageId] = $uniqueVersions[0]
-        } elseif ($uniqueVersions.Count -gt 0) {
+        } elseif ($uniqueVersions.Count -gt 0 -and $uniqueVersions[0]) {
             # Different versions per framework
             $frameworkSpecificPackages[$packageId] = $true
         }
@@ -386,8 +386,8 @@ try {
         foreach ($packageId in ($commonPackages.Keys | Sort-Object)) {
             $version = $commonPackages[$packageId]
             
-            # Skip if version is invalid
-            if (-not $version -or $version -eq "0") {
+            # Skip if version is invalid (null, "0", or major-only like "8")
+            if (-not $version -or $version -eq "0" -or $version -match '^\d+$') {
                 Write-Warning "    Skipping $packageId - invalid version: $version"
                 continue
             }
@@ -460,8 +460,8 @@ try {
                 if ($packageVersionsByFramework[$tf].ContainsKey($packageId)) {
                     $version = $packageVersionsByFramework[$tf][$packageId]
                     
-                    # Skip if version is invalid
-                    if (-not $version -or $version -eq "0") {
+                    # Skip if version is invalid (null, "0", or major-only like "8")
+                    if (-not $version -or $version -eq "0" -or $version -match '^\d+$') {
                         Write-Warning "    [$tf] Skipping $packageId - invalid version: $version"
                         continue
                     }
