@@ -113,6 +113,14 @@ function Get-BestPackageVersion {
             return $null
         }
         
+        # Extract target major version from framework
+        if ($TargetFramework -match 'net(\d+)\.') {
+            $targetMajor = [int]$matches[1]
+        } else {
+            Write-Warning "Cannot extract major version from $TargetFramework"
+            return $null
+        }
+        
         # Parse all versions
         $allVersions = $versions | ForEach-Object {
             try {
@@ -133,23 +141,50 @@ function Get-BestPackageVersion {
             return $null
         }
         
-        # Improved strategy: Find latest compatible version regardless of version numbering scheme
-        # This works for ALL packages:
-        # - Microsoft packages with .NET-aligned versions (8.x, 9.x)
-        # - Microsoft packages with independent versions (CodeAnalysis 4.x, AspNetCore 2.x)
-        # - Third-party packages (Newtonsoft.Json 13.x, Serilog 3.x, etc.)
-        # Priority order:
-        # 1. Latest stable version (if not AllowPrerelease)
-        # 2. Latest version including prerelease (if AllowPrerelease)
+        # Strategy for Microsoft packages vs third-party:
+        # 1. For Microsoft.* packages that follow .NET versioning - try to match major version
+        # 2. For packages that don't follow .NET versioning - get latest compatible
         
         $best = $null
         
-        if ($AllowPrerelease) {
-            # Allow any version (stable or prerelease)
-            $best = $allVersions | Sort-Object -Property @{Expression={$_.Version}; Descending=$true} | Select-Object -First 1
-        } else {
-            # Only stable versions
-            $best = $allVersions | Where-Object { -not $_.IsPrerelease } | Sort-Object -Property @{Expression={$_.Version}; Descending=$true} | Select-Object -First 1
+        # Check if this is a Microsoft package that typically follows .NET versioning
+        $followsDotNetVersioning = $PackageId -match '^Microsoft\.(Extensions|AspNetCore|EntityFrameworkCore|JSInterop)\.'
+        
+        if ($followsDotNetVersioning) {
+            # Strategy: Try to find version with Major <= targetMajor
+            # First try: exact major version match (preferred)
+            if ($AllowPrerelease) {
+                $best = $allVersions | Where-Object { 
+                    $_.Version.Major -eq $targetMajor 
+                } | Sort-Object -Property @{Expression={$_.Version}; Descending=$true} | Select-Object -First 1
+            } else {
+                $best = $allVersions | Where-Object { 
+                    $_.Version.Major -eq $targetMajor -and -not $_.IsPrerelease 
+                } | Sort-Object -Property @{Expression={$_.Version}; Descending=$true} | Select-Object -First 1
+            }
+            
+            # Second try: if no exact match, find highest version where Major <= targetMajor
+            if (-not $best) {
+                if ($AllowPrerelease) {
+                    $best = $allVersions | Where-Object { 
+                        $_.Version.Major -le $targetMajor 
+                    } | Sort-Object -Property @{Expression={$_.Version}; Descending=$true} | Select-Object -First 1
+                } else {
+                    $best = $allVersions | Where-Object { 
+                        $_.Version.Major -le $targetMajor -and -not $_.IsPrerelease 
+                    } | Sort-Object -Property @{Expression={$_.Version}; Descending=$true} | Select-Object -First 1
+                }
+            }
+        }
+        
+        # If not a .NET-versioned package OR no version found with above strategy
+        # Fall back to getting the latest compatible version
+        if (-not $best) {
+            if ($AllowPrerelease) {
+                $best = $allVersions | Sort-Object -Property @{Expression={$_.Version}; Descending=$true} | Select-Object -First 1
+            } else {
+                $best = $allVersions | Where-Object { -not $_.IsPrerelease } | Sort-Object -Property @{Expression={$_.Version}; Descending=$true} | Select-Object -First 1
+            }
         }
         
         if (-not $best) {
@@ -196,9 +231,14 @@ foreach ($proj in $csprojs) {
         
         $pg = $propertyGroups[0]
         
+        # Check if TargetFramework or TargetFrameworks exists
+        $tfNodes = @($pg.SelectNodes("TargetFramework"))
+        $tfsNodes = @($pg.SelectNodes("TargetFrameworks"))
+        $hasTargetFramework = ($tfNodes.Count -gt 0) -or ($tfsNodes.Count -gt 0)
+        
         # Remove both singular and plural variants
-        @($pg.SelectNodes("TargetFramework")) | ForEach-Object { $pg.RemoveChild($_) | Out-Null }
-        @($pg.SelectNodes("TargetFrameworks")) | ForEach-Object { $pg.RemoveChild($_) | Out-Null }
+        foreach ($node in $tfNodes) { $pg.RemoveChild($node) | Out-Null }
+        foreach ($node in $tfsNodes) { $pg.RemoveChild($node) | Out-Null }
         
         # Add correct element name
         $tfNode = $xml.CreateElement($elementName)
@@ -206,7 +246,12 @@ foreach ($proj in $csprojs) {
         $pg.AppendChild($tfNode) | Out-Null
         
         $xml.Save($proj.FullName)
-        Write-Host "  [OK] $($proj.Name): Set to $targetFrameworksString" -ForegroundColor Green
+        
+        if ($hasTargetFramework) {
+            Write-Host "  [OK] $($proj.Name): Updated to $targetFrameworksString" -ForegroundColor Green
+        } else {
+            Write-Host "  [OK] $($proj.Name): Added $targetFrameworksString" -ForegroundColor Cyan
+        }
     } catch {
         Write-Warning "  [FAIL] Failed to update $($proj.Name): $_"
     }
@@ -255,7 +300,40 @@ foreach ($proj in $csprojs) {
 }
 
 $packageList = $allPackages.Keys | Sort-Object
-Write-Host "  Found $($packageList.Count) unique packages" -ForegroundColor Cyan
+Write-Host "  Found $($packageList.Count) unique packages across all projects" -ForegroundColor Cyan
+
+# Also collect packages from existing Directory.Packages.props for comparison
+$existingPackages = @{}
+if ($propsFile) {
+    try {
+        [xml]$existingXml = Get-Content $propsFile.FullName
+        $existingItemGroups = @($existingXml.Project.ItemGroup)
+        foreach ($ig in $existingItemGroups) {
+            foreach ($pv in $ig.PackageVersion) {
+                if ($pv.Include) {
+                    $existingPackages[$pv.Include] = $true
+                }
+            }
+        }
+    } catch {
+        Write-Verbose "Could not read existing packages from Directory.Packages.props"
+    }
+}
+
+# Check for packages that will be removed (not in any .csproj anymore)
+$packagesToRemove = @()
+foreach ($pkg in $existingPackages.Keys) {
+    if (-not $allPackages.ContainsKey($pkg)) {
+        $packagesToRemove += $pkg
+    }
+}
+
+if ($packagesToRemove.Count -gt 0) {
+    Write-Host "  Packages no longer referenced (will be removed): $($packagesToRemove.Count)" -ForegroundColor Yellow
+    foreach ($pkg in $packagesToRemove) {
+        Write-Host "    - $pkg" -ForegroundColor DarkYellow
+    }
+}
 
 # ============================================================================
 # STEP 4: Update Directory.Packages.props
@@ -346,17 +424,23 @@ try {
     
     # Remove ONLY conditional ItemGroups that match our target frameworks
     # This allows us to recreate them with updated package versions
-    # PRESERVE unconditional ItemGroups (common packages without conditions)
+    # ALSO remove unconditional ItemGroups to prevent duplicates
     foreach ($ig in $existingItemGroups) {
         $shouldRemove = $false
         
-        if ($ig.PackageVersion -and $ig.Condition) {
-            # Check if this ItemGroup's condition matches any of our target frameworks
-            foreach ($tf in $TargetFrameworks) {
-                if ($ig.Condition -match [regex]::Escape($tf)) {
-                    $shouldRemove = $true
-                    break
+        if ($ig.PackageVersion) {
+            if ($ig.Condition) {
+                # Check if this ItemGroup's condition matches any of our target frameworks
+                foreach ($tf in $TargetFrameworks) {
+                    if ($ig.Condition -match [regex]::Escape($tf)) {
+                        $shouldRemove = $true
+                        break
+                    }
                 }
+            } else {
+                # Remove unconditional ItemGroups with PackageVersion to prevent duplicates
+                # We'll recreate all packages in conditional groups per framework
+                $shouldRemove = $true
             }
         }
         
